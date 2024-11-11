@@ -99,20 +99,6 @@ def create_tables(conn):
         )
     """)
 
-    # Create the writing questions table
-    conn.execute("""
-        CREATE TABLE writing_questions (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            questionId TEXT,
-            markingschemeId TEXT,
-            questionIndex INTEGER,
-            description TEXT,
-            availableScore REAL,
-            scoreDescritions TEXT,
-            FOREIGN KEY (questionId) REFERENCES questions(questionId)
-        )
-    """)
-
     # Create the students table
     conn.execute("""
         CREATE TABLE students (
@@ -122,15 +108,21 @@ def create_tables(conn):
         )
     """)
 
-    # Create the writing_responses table
+    # Create writing_marking_scheme table
     conn.execute("""
-        CREATE TABLE writing_reponses (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            studentId TEXT,
-            question_id INTEGER,
-            scaledScore REAL,
-            FOREIGN KEY (question_id) REFERENCES questions(id),
-            FOREIGN KEY (studentId) REFERENCES students(studentId)
+        CREATE TABLE writing_marking_scheme (
+            markingSchemeId TEXT,
+            questionId TEXT,
+            name TEXT,
+            description TEXT,
+            domainId TEXT,
+            testLevel INTEGER,
+            proficiency TEXT,
+            scoreD INTEGER,
+            sDescription TEXT,
+            FOREIGN KEY (questionId) REFERENCES writing_questions(questionId),
+            FOREIGN KEY (domainId) REFERENCES domains(domainId),
+            PRIMARY KEY (markingSchemeId, testLevel, scoreD)
         )
     """)
     
@@ -164,6 +156,22 @@ def create_tables(conn):
         )
     """)
     
+    # Create the writing_responses table
+    conn.execute("""
+        CREATE TABLE writing_responses (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            studentId TEXT,
+            writingRespose TEXT,
+            question_id INTEGER,
+            markingSchemeId TEXT,
+            score INTEGER,
+            testLevel INTERGER,
+            FOREIGN KEY (question_id) REFERENCES questions(id),
+            FOREIGN KEY (studentId) REFERENCES students(studentId),
+            FOREIGN KEY (score, testLevel, markingSchemeId) REFERENCES writing_marking_scheme(markingSchemeId, testLevel, scoreD)
+        )
+    """)
+
     conn.commit()
 
 
@@ -356,4 +364,44 @@ def insert_attempts(conn, attempts_df):
         conn.execute("""
             INSERT INTO attempts (studentId, correct, answeredOn, questionId, questionNo, parallelTestSection, node) VALUES (?, ?, ?, ?, ?, ?, ?)
         """, (row["student.studentId"], row["correct"], row["answeredOn"], row["questionId"], row["questionNo"], row["parallelTestSection"], row["node"]))
+    conn.commit()
+
+
+def insert_writing_marking_scheme(conn, writing_marking_scheme_df):
+    """
+    Insert the writing marking scheme into the writing_marking_scheme table
+    
+    Parameters:
+    conn: sqlite3.Connection
+    The connection to the database
+    writing_marking_scheme_df: pd.DataFrame
+    A DataFrame containing the writing marking scheme information
+        
+    Returns:
+    None
+    """
+    for _, row in writing_marking_scheme_df.iterrows():
+        conn.execute("""
+            INSERT INTO writing_marking_scheme (questionId, markingSchemeId, name, description, domainId, testLevel, proficiency, scoreD, sDescription) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (row["questionId"], row["id"], row["name"], row["description"], row["domainId"], row["testLevel"], row["proficiencyLevel"],row["scoreD"], row["sDescription"]))
+    conn.commit()
+
+
+def insert_writing_responses(conn, writing_responses_df):
+    """
+    Insert the writing responses into the writing_responses table
+    
+    Parameters:
+    conn: sqlite3.Connection
+    The connection to the database
+    writing_responses_df: pd.DataFrame
+    A DataFrame containing the writing responses information
+        
+    Returns:
+    None
+    """
+    for _, row in writing_responses_df.iterrows():
+        conn.execute("""
+            INSERT INTO writing_responses (studentId, writingRespose, question_id, markingSchemeId, score, testLevel) VALUES (?, ?, ?, ?, ?, ?)
+        """, (row["student.studentId"], row["writingResponse"], row["questionId"], row["rowguid"], row["effectiveScore"], row["student.testLevel"]))
     conn.commit()
