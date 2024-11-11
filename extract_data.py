@@ -1,8 +1,22 @@
 import pandas as pd
 import database_interaction
 
+proficiency_score_adjustment_amount = 20
+
 
 def fix_proficiency_score_cut_off_points(proficiency_score_cut_off_points_normalized):
+    """
+    Fix the proficiency score cut off points by adding a startPoint column if it doesn't exist.
+    The startPoint is calculated as the scoreCutPoint of the previous level for each unique disciplineId and year.
+    
+    Parameters:
+    proficiency_score_cut_off_points_normalized: pd.DataFrame
+    A DataFrame containing the proficiency score cut off points information
+    
+    Returns:
+    pd.DataFrame
+    The modified DataFrame with the startPoint column added
+    """    
     if "startPoint" not in proficiency_score_cut_off_points_normalized.columns:
         # Define the order of proficiency levels
         level_order = ["Needs additional support", "Developing", "Strong", "Exceeding"]
@@ -24,11 +38,46 @@ def fix_proficiency_score_cut_off_points(proficiency_score_cut_off_points_normal
     if "disciplineId" in proficiency_score_cut_off_points_normalized.columns:
         proficiency_score_cut_off_points_normalized = proficiency_score_cut_off_points_normalized.rename(columns={"disciplineId": "domainId"})
     
+    # Add the new proficiency level "Just below developing"
+    new_rows = []
+    for _, row in proficiency_score_cut_off_points_normalized.iterrows():
+        if row["level"] == "Developing":
+            new_row = row.copy()
+            new_row["level"] = "Just below developing"
+            new_row["startPoint"] = row["startPoint"] - proficiency_score_adjustment_amount
+            new_row["scoreCutPoint"] = row["startPoint"]
+            new_rows.append(new_row)
+        elif row["level"] == "Exceeding":
+            new_row = row.copy()
+            new_row["level"] = "Just below exceeding"
+            new_row["startPoint"] = row["startPoint"] - proficiency_score_adjustment_amount
+            new_row["scoreCutPoint"] = row["startPoint"]
+            new_rows.append(new_row)
+    
+    proficiency_score_cut_off_points_normalized = pd.concat([proficiency_score_cut_off_points_normalized, pd.DataFrame(new_rows)], ignore_index=True)
+    
+    # Adjust the "Needs additional support" scoreCutPoint to reflect the 20-point change
+    proficiency_score_cut_off_points_normalized.loc[proficiency_score_cut_off_points_normalized["level"] == "Needs additional support", "scoreCutPoint"] -= proficiency_score_adjustment_amount
+
+    # Adjust the "Strong" scoreCutPoint to reflect the 20-point change for "Just below exceeding"
+    proficiency_score_cut_off_points_normalized.loc[proficiency_score_cut_off_points_normalized["level"] == "Strong", "scoreCutPoint"] -= proficiency_score_adjustment_amount
+    
     return proficiency_score_cut_off_points_normalized
 
 
 def extract_data(conn, raw_data):
-
+    """
+    Extract data from the raw JSON and insert it into the database.
+    
+    Parameters:
+    conn: sqlite3.Connection
+    The connection to the database
+    raw_data: dict
+    The raw JSON data from the NAPLAN file.
+    
+    Returns:
+    None
+    """
     # Normalize the JSON data
     raw_data = pd.json_normalize(raw_data)
 
@@ -47,7 +96,10 @@ def extract_data(conn, raw_data):
     # Exract the proficiencyScoreCutOffPoints column, need to add in the cut off points for just belows
     proficiency_score_cut_off_points = raw_data["proficiencyScoreCutOffPoints"]
     proficiency_score_cut_off_points_normalized = pd.json_normalize(proficiency_score_cut_off_points.explode())
-    database_interaction.insert_proficiency_score_cut_off_points(conn, fix_proficiency_score_cut_off_points(proficiency_score_cut_off_points_normalized))
+    fixed_proficiency_score = fix_proficiency_score_cut_off_points(proficiency_score_cut_off_points_normalized)
+    fixed_proficiency_score.to_csv("fixed_proficiency_score.csv")
+    database_interaction.insert_proficiency_score_cut_off_points(conn, fixed_proficiency_score)
+
 
     # Extract the questions column
     questions = raw_data["questions"]
