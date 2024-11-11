@@ -97,7 +97,7 @@ def extract_data(conn, raw_data):
     proficiency_score_cut_off_points = raw_data["proficiencyScoreCutOffPoints"]
     proficiency_score_cut_off_points_normalized = pd.json_normalize(proficiency_score_cut_off_points.explode())
     fixed_proficiency_score = fix_proficiency_score_cut_off_points(proficiency_score_cut_off_points_normalized)
-    fixed_proficiency_score.to_csv("fixed_proficiency_score.csv")
+    # fixed_proficiency_score.to_csv("fixed_proficiency_score.csv")
     database_interaction.insert_proficiency_score_cut_off_points(conn, fixed_proficiency_score)
 
 
