@@ -60,25 +60,35 @@ for col in writing_questions_exploded.columns:
 # Explode the scoreDescriptions column
 marking_scheme_normalized_exploded = marking_scheme_normalized.explode("scoreDescriptions")
 
-# Normalize the exploded scoreDescriptions column
-score_descriptions_normalized = pd.json_normalize(marking_scheme_normalized_exploded["scoreDescriptions"])
+# Ensure that scoreDescriptions is a list of dictionaries
+marking_scheme_normalized_exploded["scoreDescriptions"] = marking_scheme_normalized_exploded["scoreDescriptions"].apply(lambda x: eval(x) if isinstance(x, str) else x)
 
-# Split the scoreDescriptions into score and description
-score_descriptions_normalized = score_descriptions_normalized.apply(lambda x: pd.Series(x), axis=1)
-score_descriptions_normalized.columns = ['score', 'description']
+# Create a list to hold the expanded rows
+expanded_rows = []
 
-# Add the other columns back to the normalized score descriptions DataFrame
-for col in marking_scheme_normalized_exploded.columns:
-    if col != "scoreDescriptions":
-        score_descriptions_normalized[col] = marking_scheme_normalized_exploded[col].values
+# Iterate over each row and split the scoreDescriptions
+for index, row in marking_scheme_normalized_exploded.iterrows():
+    if isinstance(row["scoreDescriptions"], list):
+        for item in row["scoreDescriptions"]:
+            for score, description in item.items():
+                new_row = row.copy()
+                new_row["scoreD"] = score
+                new_row["sDescription"] = description
+                expanded_rows.append(new_row)
+
+# Create a DataFrame from the expanded rows
+score_descriptions_normalized = pd.DataFrame(expanded_rows)
+
+# Drop the original scoreDescriptions column
+score_descriptions_normalized = score_descriptions_normalized.drop(columns=["scoreDescriptions"])
 
 # Debug print to check the structure of score_descriptions_normalized
 print(score_descriptions_normalized.head())
 
 # Save the score_descriptions_normalized DataFrame to a CSV file
 score_descriptions_normalized.to_csv("score_descriptions_normalized.csv", index=False)
-### ISSUE ENDS HERE ###
 
+# Attempts
 attempts = raw_2024["attempts"]
 attempts_normalized = pd.json_normalize(attempts.explode())
 
