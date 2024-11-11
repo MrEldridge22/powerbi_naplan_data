@@ -4,7 +4,27 @@ import database_interaction
 
 def fix_proficiency_score_cut_off_points(proficiency_score_cut_off_points_normalized):
     if "startPoint" not in proficiency_score_cut_off_points_normalized.columns:
+        # Define the order of proficiency levels
+        level_order = ["Needs additional support", "Developing", "Strong", "Exceeding"]
         
+        # Sort the DataFrame by disciplineId, year, and proficiency level
+        proficiency_score_cut_off_points_normalized["level_order"] = proficiency_score_cut_off_points_normalized["level"].apply(lambda x: level_order.index(x))
+        proficiency_score_cut_off_points_normalized = proficiency_score_cut_off_points_normalized.sort_values(by=["disciplineId", "year", "level_order"])
+        
+        # Calculate the startPoint
+        proficiency_score_cut_off_points_normalized["startPoint"] = proficiency_score_cut_off_points_normalized.groupby(["disciplineId", "year"])["scoreCutPoint"].shift(1)
+        
+        # Fill NaN values in startPoint with 0 or any other appropriate value
+        proficiency_score_cut_off_points_normalized["startPoint"] = proficiency_score_cut_off_points_normalized["startPoint"].fillna(0)
+        
+        # Drop the temporary level_order column
+        proficiency_score_cut_off_points_normalized = proficiency_score_cut_off_points_normalized.drop(columns=["level_order"])
+
+    # Change the column name from disciplineId to domainId
+    if "disciplineId" in proficiency_score_cut_off_points_normalized.columns:
+        proficiency_score_cut_off_points_normalized = proficiency_score_cut_off_points_normalized.rename(columns={"disciplineId": "domainId"})
+    
+    return proficiency_score_cut_off_points_normalized
 
 
 def extract_data(conn, raw_data):
@@ -27,7 +47,7 @@ def extract_data(conn, raw_data):
     # Exract the proficiencyScoreCutOffPoints column, need to add in the cut off points for just belows
     proficiency_score_cut_off_points = raw_data["proficiencyScoreCutOffPoints"]
     proficiency_score_cut_off_points_normalized = pd.json_normalize(proficiency_score_cut_off_points.explode())
-    database_interaction.insert_proficiency_score_cut_off_points(conn, proficiency_score_cut_off_points_normalized)
+    database_interaction.insert_proficiency_score_cut_off_points(conn, fix_proficiency_score_cut_off_points(proficiency_score_cut_off_points_normalized))
 
     # Extract the questions column
     questions = raw_data["questions"]
