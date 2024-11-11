@@ -101,7 +101,7 @@ def create_tables(conn):
 
     # Create the students table
     conn.execute("""
-        CREATE TABLE students (
+        CREATE TABLE naplan_students (
             studentId TEXT PRIMARY KEY,
             studentLOTE TEXT,
             schoolStudentId TEXT
@@ -309,7 +309,7 @@ def insert_questions(conn, questions_df):
 
 def insert_students(conn, students_df):
     """
-    Insert the students into the students table
+    Insert the students into the naplan_students table
     
     Parameters:
     conn: sqlite3.Connection
@@ -322,7 +322,7 @@ def insert_students(conn, students_df):
     """
     for _, row in students_df.iterrows():
         conn.execute("""
-            INSERT INTO students (studentId, studentLOTE, schoolStudentId) VALUES (?, ?, ?)
+            INSERT INTO naplan_students (studentId, studentLOTE, schoolStudentId) VALUES (?, ?, ?)
         """, (row["student.studentId"], row["student.metadata.studentLOTE"], row["student.metadata.schoolStudentId"]))
     conn.commit()
 
