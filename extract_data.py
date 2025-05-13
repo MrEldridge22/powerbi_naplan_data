@@ -1,8 +1,6 @@
 import pandas as pd
-import database_interaction
 
 proficiency_score_adjustment_amount = 20
-
 
 def fix_proficiency_score_cut_off_points(proficiency_score_cut_off_points_normalized):
     """
@@ -65,15 +63,16 @@ def fix_proficiency_score_cut_off_points(proficiency_score_cut_off_points_normal
     return proficiency_score_cut_off_points_normalized
 
 
-def extract_data(conn, raw_data):
+def extract_domains(raw_data, df):
     """
-    Extract data from the raw JSON and insert it into the database.
+    Extract the domains from the raw JSON and insert them into the dataframe.
     
     Parameters:
-    conn: sqlite3.Connection
-    The connection to the database
     raw_data: dict
     The raw JSON data from the NAPLAN file.
+    
+    df: pd.DataFrame
+    The dataframe to insert the domains into.
     
     Returns:
     None
@@ -83,86 +82,109 @@ def extract_data(conn, raw_data):
 
     # Extract the domains column
     domains = raw_data["domains"]
+    
     # Further normalize each JSON entry within the domains column
     domains_normalized = pd.json_normalize(domains.explode())
-    database_interaction.insert_domains(conn, domains_normalized)
+    
+    # Insert the normalized domains data into the dataframe
+    df = pd.concat([df, domains_normalized], ignore_index=True)
+    
+    return df
 
-    # Extract the subdomains column
-    sub_domains = raw_data["subdomains"]
-    # Further normalize each JSON entry within the subdomains column
-    sub_domains_normalized = pd.json_normalize(sub_domains.explode())
-    database_interaction.insert_subdomains(conn, sub_domains_normalized)
 
-    # Exract the proficiencyScoreCutOffPoints column, need to add in the cut off points for just belows
-    proficiency_score_cut_off_points = raw_data["proficiencyScoreCutOffPoints"]
-    proficiency_score_cut_off_points_normalized = pd.json_normalize(proficiency_score_cut_off_points.explode())
-    fixed_proficiency_score = fix_proficiency_score_cut_off_points(proficiency_score_cut_off_points_normalized)
-    # fixed_proficiency_score.to_csv("fixed_proficiency_score.csv")
-    database_interaction.insert_proficiency_score_cut_off_points(conn, fixed_proficiency_score)
+def extract_proficiency(raw_data, df):
+    """
+    Extract the proficiency data from the raw JSON and insert it into the dataframe.
+    
+    Parameters:
+    raw_data: dict
+    The raw JSON data from the NAPLAN file.
+    
+    df: pd.DataFrame
+    The dataframe to insert the proficiency data into.
+    
+    Returns:
+    None
+    """
+    
+    # Normalize the JSON data
+    raw_data = pd.json_normalize(raw_data)
 
+    # Extract the proficiencyScoreCutOffPoints column
+    proficiency_sortorder = raw_data["proficiencyScoreCutOffPoints"]
+    
+    # Further normalize each JSON entry within the proficiencySortorder column
+    proficiency_sortorder_normalized = pd.json_normalize(proficiency_sortorder.explode())
+    
+    # Fix the proficiency score cut off points
+    proficiency_sortorder_normalized = fix_proficiency_score_cut_off_points(proficiency_sortorder_normalized)
+    
+    # Insert the normalized proficiencySortorder data into the dataframe
+    df = pd.concat([df, proficiency_sortorder_normalized], ignore_index=True)
+    
+    return df
+
+
+def extract_questions(raw_data, df):
+    """
+    Extract the questions from the raw JSON and insert them into the dataframe.
+    
+    Parameters:
+    raw_data: dict
+    The raw JSON data from the NAPLAN file.
+    
+    df: pd.DataFrame
+    The dataframe to insert the questions into.
+    
+    Returns:
+    None
+    """
+    
+    # Normalize the JSON data
+    raw_data = pd.json_normalize(raw_data)
 
     # Extract the questions column
     questions = raw_data["questions"]
+    
+    # Further normalize each JSON entry within the questions column
     questions_normalized = pd.json_normalize(questions.explode())
-    # questions_normalized.to_csv("questions_normalized.csv")
-    database_interaction.insert_questions(conn, questions_normalized)
 
-    ### ISSUE STARTS HERE ###
-    # Extract writing marking scheme
-    writing_questions = questions_normalized[questions_normalized["domain"] == "Writing"]
+    # Insert the normalized questions data into the dataframe
+    df = pd.concat([df, questions_normalized], ignore_index=True)
+    
+    return df
 
-    # Explode the markingSchemeComponents column
-    writing_questions_exploded = writing_questions.explode("markingSchemeComponents")
 
-    # Normalize the exploded markingSchemeComponents column
-    marking_scheme_normalized = pd.json_normalize(writing_questions_exploded["markingSchemeComponents"])
+def extract_attempts(raw_data, df):
+    """
+    Extract the attempts from the raw JSON and insert them into the dataframe.
+    
+    Parameters:
+    raw_data: dict
+    The raw JSON data from the NAPLAN file.
+    
+    df: pd.DataFrame
+    The dataframe to insert the attempts into.
+    
+    Returns:
+    None
+    """
+    
+    # Normalize the JSON data
+    raw_data = pd.json_normalize(raw_data)
 
-    # Add the other columns back to the normalized marking scheme DataFrame
-    for col in writing_questions_exploded.columns:
-        if col != "markingSchemeComponents":
-            marking_scheme_normalized[col] = writing_questions_exploded[col].values
-
-    # Explode the scoreDescriptions column
-    marking_scheme_normalized_exploded = marking_scheme_normalized.explode("scoreDescriptions")
-
-    # Ensure that scoreDescriptions is a list of dictionaries
-    marking_scheme_normalized_exploded["scoreDescriptions"] = marking_scheme_normalized_exploded["scoreDescriptions"].apply(lambda x: eval(x) if isinstance(x, str) else x)
-
-    # Create a list to hold the expanded rows
-    expanded_rows = []
-
-    # Iterate over each row and split the scoreDescriptions
-    for index, row in marking_scheme_normalized_exploded.iterrows():
-        if isinstance(row["scoreDescriptions"], list):
-            for item in row["scoreDescriptions"]:
-                for score, description in item.items():
-                    new_row = row.copy()
-                    new_row["scoreD"] = score
-                    new_row["sDescription"] = description
-                    expanded_rows.append(new_row)
-
-    # Create a DataFrame from the expanded rows
-    score_descriptions_normalized = pd.DataFrame(expanded_rows)
-
-    # Drop the original scoreDescriptions column
-    score_descriptions_normalized = score_descriptions_normalized.drop(columns=["scoreDescriptions"])
-
-    database_interaction.insert_writing_marking_scheme(conn, score_descriptions_normalized)
-
-    # Attempts
+    # Extract the attempts column
     attempts = raw_data["attempts"]
+        
+    # Further normalize each JSON entry within the attempts column
     attempts_normalized = pd.json_normalize(attempts.explode())
 
     # Student information
     students_df = attempts_normalized[["student.studentId", "student.metadata.studentLOTE", "student.metadata.schoolStudentId"]]
-    # Remove duplicates
-    students_df = students_df.drop_duplicates()
-    database_interaction.insert_students(conn, students_df)
-    database_interaction.insert_students_scores(conn, attempts_normalized)
-
+    
     # Extract the answers column and the corresponding student.studentId column
     answers_df = attempts_normalized[["student.studentId", "student.testLevel", "answers"]]
-
+    
     # Explode the answers column
     answers_exploded = answers_df.explode("answers")
 
@@ -172,9 +194,6 @@ def extract_data(conn, raw_data):
     # Add the student.studentId column back to the normalized answers DataFrame
     answers_normalized["student.studentId"] = answers_exploded["student.studentId"].values
     answers_normalized["student.testLevel"] = answers_exploded["student.testLevel"].values
-
-    # Non Writing Responses
-    database_interaction.insert_attempts(conn, answers_normalized[answers_normalized["writingResponse"].isna()])
 
     # Writing Responses
     writing_responses = answers_normalized[answers_normalized["writingResponse"].notna()]
@@ -187,10 +206,15 @@ def extract_data(conn, raw_data):
         if col != "markingSchemeComponents":
             writing_responses_normalized[col] = writing_responses_exploded[col].values
 
-    database_interaction.insert_writing_responses(conn, writing_responses_normalized)
-
 
     answers_normalized = pd.json_normalize(attempts_normalized['answers'].explode())
+    
     # Merge the normalized answers back into the attempts_normalized DataFrame
     answers_normalized.columns = ['answers_' + col for col in answers_normalized.columns]
     attempts_normalized = attempts_normalized.drop(columns=['answers']).join(answers_normalized)
+
+    # Insert the normalized attempts data into the dataframe
+    df = pd.concat([df, attempts_normalized], ignore_index=True)
+    
+    return df
+
