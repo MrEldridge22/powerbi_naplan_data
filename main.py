@@ -49,11 +49,14 @@ else:
     print("No questionIdentifiers found with different descriptor values.")
 
 # Export the full questions dataset
-questions.to_csv("questions.csv", index=False)
+questions.to_csv("powerBI_import\\questions.csv", index=False)
+
 # Export Student Responses to csv's, have split writing responses into it's own file
-attempts.to_csv("attempts.csv", index=False)
-writing_attempts.to_csv("writing_attempts.csv", index=False)
+attempts.to_csv("powerBI_import\\attempts.csv", index=False)
+writing_attempts.to_csv("powerBI_import\\writing_attempts.csv", index=False)
+
 # Export the proficiency sort order
-proficiencySortorder.to_csv("proficiencySortorder.csv", index=False)
+proficiencySortorder.to_csv("powerBI_import\\proficiencySortorder.csv", index=False)
+
 # Export the domains
-domainsDF.to_csv("domains.csv", index=False)
+domainsDF.to_csv("powerBI_import\\domains.csv", index=False)
