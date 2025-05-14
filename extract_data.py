@@ -89,6 +89,8 @@ def extract_domains(raw_data, df):
     
     # Insert the normalized domains data into the dataframe
     df = pd.concat([df, domains_normalized], ignore_index=True)
+
+    df.drop_duplicates(inplace=True)
     
     return df
 
@@ -247,6 +249,9 @@ def extract_attempts(raw_data, df):
         "markingSchemeComponents"
     ]
     result_df = result_df.drop(columns=[col for col in unwanted_columns if col in result_df.columns], errors='ignore')
+
+    # Drop rows where the "correct" column is blank
+    result_df = result_df[result_df["correct"].notna()]
 
     # Insert the normalized attempts data into the dataframe
     df = pd.concat([df, result_df], ignore_index=True)

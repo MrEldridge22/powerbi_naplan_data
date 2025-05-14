@@ -9,6 +9,7 @@ proficiencySortorder = pd.DataFrame()
 questions = pd.DataFrame()
 attempts = pd.DataFrame()
 writing_attempts = pd.DataFrame()
+marking_scheme_components = pd.DataFrame()
 
 # Load the raw data from the JSON file
 dataFilePath = "raw_data\\"
