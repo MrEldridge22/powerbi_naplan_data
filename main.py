@@ -8,6 +8,7 @@ domainsDF = pd.DataFrame()
 proficiencySortorder = pd.DataFrame()
 questions = pd.DataFrame()
 attempts = pd.DataFrame()
+writing_attempts = pd.DataFrame()
 
 # Load the raw data from the JSON file
 dataFilePath = "raw_data\\"
@@ -22,6 +23,8 @@ for file in dataFiles:
             proficiencySortorder = extract_data.extract_proficiency(raw, proficiencySortorder)
             questions = extract_data.extract_questions(raw, questions, year)
             attempts = extract_data.extract_attempts(raw, attempts)
+            writing_attempts = extract_data.extract_writing_attempts(raw, writing_attempts)
+            print(f"Finished processing file: {file}")
 
 # Check if the questionIdentifier has duplicates with different descriptor values
 duplicates_check = questions.groupby('questionIdentifier')['descriptor'].nunique().reset_index()
@@ -46,4 +49,10 @@ else:
 
 # Export the full questions dataset
 questions.to_csv("questions.csv", index=False)
+# Export Student Responses to csv's, have split writing responses into it's own file
 attempts.to_csv("attempts.csv", index=False)
+writing_attempts.to_csv("writing_attempts.csv", index=False)
+# Export the proficiency sort order
+proficiencySortorder.to_csv("proficiencySortorder.csv", index=False)
+# Export the domains
+domainsDF.to_csv("domains.csv", index=False)

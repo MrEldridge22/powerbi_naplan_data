@@ -297,23 +297,54 @@ def extract_writing_attempts(raw_data, df):
     ]
 
     # Filter columns that exist in the DataFrame
-    existing_columns = [col for col in columns_to_keep if col in attempts_normalised.columns]
-    attempts_normalised = attempts_normalised[existing_columns]
+    existing_columns = [col for col in columns_to_keep if col in writing_attempts_normalised.columns]
+    writing_attempts_normalised = writing_attempts_normalised[existing_columns]
 
     # Filter out where student.metadata.schoolStudentId is Blank, this removes students with no EDID
-    attempts_normalised = attempts_normalised[attempts_normalised["student.metadata.schoolStudentId"].notna()]
+    writing_attempts_normalised = writing_attempts_normalised[writing_attempts_normalised["student.metadata.schoolStudentId"].notna()]
     
     # Explode the "answers" column to create a separate row for each answer entry and reset the index to ensure proper alignment of rows
-    df_exploded = attempts_normalised.explode("answers").reset_index(drop=True)
+    df_exploded = writing_attempts_normalised.explode("answers").reset_index(drop=True)
     
     # Normalise the exploded answers column
-    attempts_normalised = pd.json_normalize(df_exploded["answers"].tolist())
+    writing_attempts_normalised = pd.json_normalize(df_exploded["answers"].tolist())
 
     # Drop the original "answers" column from the exploded DataFrame and join it with the normalised answers DataFrame,
     # effectively merging the parsed answer fields as individual columns into the result
-    result_df = df_exploded.drop(columns=["answers"]).join(attempts_normalised)
+    result_df = df_exploded.drop(columns=["answers"]).join(writing_attempts_normalised)
 
+    # Remove unwanted columns
+    unwanted_columns = [
+        "attempted",
+        "notAttempted",
+        "incorrect",
+        "correctAttempts",
+        "incorrectAttempts",
+        "testAttemptStatus",
+        "correct",
+        "questionNo",
+        "questionID",
+        "parallelTestSection",
+        "node",
+        "locationInTestSection",
+        "eventIdentifier",
+        "performance"
+    ]
+    result_df = result_df.drop(columns=[col for col in unwanted_columns if col in result_df.columns], errors='ignore')
+
+    # Check if markingSchemeComponents exists before trying to expand it
+    if "markingSchemeComponents" not in result_df.columns:
+        print("markingSchemeComponents column does not exist - test not marked yet")
+        df_expanded = result_df.copy()
+    else:
+        # Expand out markingSchemeComponents
+        df_expanded = result_df.explode("markingSchemeComponents").reset_index(drop=True)
+        # Normalize the exploded markingSchemeComponents column
+        marking_components = pd.json_normalize(df_expanded["markingSchemeComponents"])
+        # Drop the original column and join the new columns
+        df_expanded = df_expanded.drop(columns=["markingSchemeComponents"]).join(marking_components)
+    
     # Insert the normalized attempts data into the dataframe
-    df = pd.concat([df, result_df], ignore_index=True)
+    df = pd.concat([df, df_expanded], ignore_index=True)
     
     return df
