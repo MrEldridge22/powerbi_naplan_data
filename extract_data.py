@@ -1,4 +1,5 @@
 import pandas as pd
+import json
 
 proficiency_score_adjustment_amount = 20
 
@@ -125,7 +126,7 @@ def extract_proficiency(raw_data, df):
     return df
 
 
-def extract_questions(raw_data, df):
+def extract_questions(raw_data, df, year):
     """
     Extract the questions from the raw JSON and insert them into the dataframe.
     
@@ -149,6 +150,24 @@ def extract_questions(raw_data, df):
     # Further normalize each JSON entry within the questions column
     questions_normalized = pd.json_normalize(questions.explode())
 
+    # Keep only the specified columns
+    columns_to_keep = [
+        "questionIdentifier",
+        "descriptor",
+        "domain",
+        "subdomain",
+        "testLevel",
+        "proficiencyLevel",
+        "attempts",
+        "correct",
+        "incorrect",
+        "notAttempted"
+    ]
+    questions_normalized = questions_normalized.filter(items=columns_to_keep)
+
+    # Add the year column
+    questions_normalized["year"] = year
+
     # Insert the normalized questions data into the dataframe
     df = pd.concat([df, questions_normalized], ignore_index=True)
     
@@ -170,51 +189,131 @@ def extract_attempts(raw_data, df):
     None
     """
     
-    # Normalize the JSON data
+    # Normalise the JSON data
     raw_data = pd.json_normalize(raw_data)
 
     # Extract the attempts column
     attempts = raw_data["attempts"]
         
-    # Further normalize each JSON entry within the attempts column
-    attempts_normalized = pd.json_normalize(attempts.explode())
+    # Further normalise each JSON entry within the attempts column
+    attempts_normalised = pd.json_normalize(attempts.explode())
 
-    # Student information
-    students_df = attempts_normalized[["student.studentId", "student.metadata.studentLOTE", "student.metadata.schoolStudentId"]]
+    attempts_normalised = attempts_normalised[attempts_normalised["domain.isWritingTask"] != True]
+
+    # Keep only the specified columns
+    columns_to_keep = [
+        "answers",
+        "attempted", 
+        "notAttempted", 
+        "correctAttempts", 
+        "incorrectAttempts", 
+        "testAttemptStatus",
+        "scaledScore",
+        "student.testLevel",
+        "student.metadata.studentLOTE",
+        "student.metadata.schoolStudentId",
+        "domain.domainName",
+        "domain.domainId"
+    ]
+
+    # Filter columns that exist in the DataFrame
+    existing_columns = [col for col in columns_to_keep if col in attempts_normalised.columns]
+    attempts_normalised = attempts_normalised[existing_columns]
+
+    # Filter out where student.metadata.schoolStudentId is Blank, this removes students with no EDID
+    attempts_normalised = attempts_normalised[attempts_normalised["student.metadata.schoolStudentId"].notna()]
     
-    # Extract the answers column and the corresponding student.studentId column
-    answers_df = attempts_normalized[["student.studentId", "student.testLevel", "answers"]]
+    # Explode the "answers" column to create a separate row for each answer entry and reset the index to ensure proper alignment of rows
+    df_exploded = attempts_normalised.explode("answers").reset_index(drop=True)
     
-    # Explode the answers column
-    answers_exploded = answers_df.explode("answers")
+    # Normalise the exploded answers column
+    attempts_normalised = pd.json_normalize(df_exploded["answers"].tolist())
 
-    # Normalize the exploded answers column
-    answers_normalized = pd.json_normalize(answers_exploded["answers"])
+    # Drop the original "answers" column from the exploded DataFrame and join it with the normalised answers DataFrame,
+    # effectively merging the parsed answer fields as individual columns into the result
+    result_df = df_exploded.drop(columns=["answers"]).join(attempts_normalised)
 
-    # Add the student.studentId column back to the normalized answers DataFrame
-    answers_normalized["student.studentId"] = answers_exploded["student.studentId"].values
-    answers_normalized["student.testLevel"] = answers_exploded["student.testLevel"].values
-
-    # Writing Responses
-    writing_responses = answers_normalized[answers_normalized["writingResponse"].notna()]
-    # Explode the writingResponses column
-    writing_responses_exploded = writing_responses.explode("markingSchemeComponents")
-    # Normalize the exploded writingResponses column
-    writing_responses_normalized = pd.json_normalize(writing_responses_exploded["markingSchemeComponents"])
-    # Add the other columns back to the normalized writing responses DataFrame
-    for col in writing_responses_exploded.columns:
-        if col != "markingSchemeComponents":
-            writing_responses_normalized[col] = writing_responses_exploded[col].values
-
-
-    answers_normalized = pd.json_normalize(attempts_normalized['answers'].explode())
-    
-    # Merge the normalized answers back into the attempts_normalized DataFrame
-    answers_normalized.columns = ['answers_' + col for col in answers_normalized.columns]
-    attempts_normalized = attempts_normalized.drop(columns=['answers']).join(answers_normalized)
+    # Remove unwanted columns
+    unwanted_columns = [
+        "testAttemptStatus",
+        "questionNo",
+        "questionID",
+        "parallelTestSection",
+        "node",
+        "locationInTestSection",
+        "eventIdentifier",
+        "performance",
+        "writingResponse",
+        "markingSchemeComponents"
+    ]
+    result_df = result_df.drop(columns=[col for col in unwanted_columns if col in result_df.columns], errors='ignore')
 
     # Insert the normalized attempts data into the dataframe
-    df = pd.concat([df, attempts_normalized], ignore_index=True)
+    df = pd.concat([df, result_df], ignore_index=True)
     
     return df
 
+
+def extract_writing_attempts(raw_data, df):
+    """
+    Extract the writing attempts from the raw JSON and insert them into the dataframe.
+    
+    Parameters:
+    raw_data: dict
+    The raw JSON data from the NAPLAN file.
+    
+    df: pd.DataFrame
+    The dataframe to insert the writing attempts into.
+    
+    Returns:
+    None
+    """
+    
+    # Normalize the JSON data
+    raw_data = pd.json_normalize(raw_data)
+
+    # Extract the writingAttempts column
+    writing_attempts = raw_data["attempts"]
+    
+    # Further normalize each JSON entry within the writingAttempts column
+    writing_attempts_normalised = pd.json_normalize(writing_attempts.explode())
+
+    writing_attempts_normalised = writing_attempts_normalised[writing_attempts_normalised["domain.isWritingTask"] == True]
+
+    # Keep only the specified columns
+    columns_to_keep = [
+        "answers",
+        "attempted", 
+        "notAttempted", 
+        "correctAttempts", 
+        "incorrectAttempts", 
+        "testAttemptStatus",
+        "scaledScore",
+        "student.testLevel",
+        "student.metadata.studentLOTE",
+        "student.metadata.schoolStudentId",
+        "domain.domainName",
+        "domain.domainId"
+    ]
+
+    # Filter columns that exist in the DataFrame
+    existing_columns = [col for col in columns_to_keep if col in attempts_normalised.columns]
+    attempts_normalised = attempts_normalised[existing_columns]
+
+    # Filter out where student.metadata.schoolStudentId is Blank, this removes students with no EDID
+    attempts_normalised = attempts_normalised[attempts_normalised["student.metadata.schoolStudentId"].notna()]
+    
+    # Explode the "answers" column to create a separate row for each answer entry and reset the index to ensure proper alignment of rows
+    df_exploded = attempts_normalised.explode("answers").reset_index(drop=True)
+    
+    # Normalise the exploded answers column
+    attempts_normalised = pd.json_normalize(df_exploded["answers"].tolist())
+
+    # Drop the original "answers" column from the exploded DataFrame and join it with the normalised answers DataFrame,
+    # effectively merging the parsed answer fields as individual columns into the result
+    result_df = df_exploded.drop(columns=["answers"]).join(attempts_normalised)
+
+    # Insert the normalized attempts data into the dataframe
+    df = pd.concat([df, result_df], ignore_index=True)
+    
+    return df
